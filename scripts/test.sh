@@ -102,9 +102,56 @@ if grep -rn 'network_mode: host' "$PLUGIN/dragonfly/compose.py" >/dev/null; then
 if grep -rn 'memlock' "$PLUGIN/dragonfly/compose.py" >/dev/null; then pass "memlock limit retained"; else fail "memlock limit missing"; fi
 if grep -rn 'down", "-v' "$PLUGIN/dragonfly/service.py" >/dev/null; then pass "uninstall removes volumes"; else fail "uninstall does not remove volumes"; fi
 
-step "Endpoint wiring (public.py vs index.html)"
-for method in get_settings set_settings install start stop restart status logs; do
-  if grep -q "def $method" "$PLUGIN/public.py" && grep -q "'$method'" "$PLUGIN/index.html"; then
+step "index.html is a panel fragment, not a document"
+UI="$PLUGIN/index.html"
+# Strip comments first: this file's own header explains the rule and names the
+# banned tags, which would otherwise trip the check on itself.
+UI_BODY=$("$PYTHON" -c "
+import re, sys
+src = open(sys.argv[1]).read()
+src = re.sub(r'<!--.*?-->', '', src, flags=re.S)
+sys.stdout.write(src)
+" "$UI")
+if printf '%s' "$UI_BODY" | grep -qiE '<!DOCTYPE|<html|<head|<body|<title'; then
+  fail "index.html contains document tags; the panel injects a fragment"
+else
+  pass "no document tags"
+fi
+if grep -q 'class="bt-form' "$UI" && grep -q 'bt-w-con' "$UI" && grep -q 'plugin_body' "$UI"; then
+  pass "panel layout classes present"
+else
+  fail "missing bt-form / bt-w-con / plugin_body scaffolding"
+fi
+if grep -qE 'action=a&name=|/plugin\?' "$UI"; then pass "uses the panel plugin endpoint"; else fail "no panel plugin endpoint in index.html"; fi
+# jQuery and the panel's button classes come from the panel; do not re-add a lib.
+if grep -qE '<script src="https?://' "$UI"; then fail "external script in index.html"; else pass "no external scripts"; fi
+
+step "Backend convention"
+MAIN="$PLUGIN/dragonflydb_main.py"
+if [ -f "$MAIN" ]; then pass "<name>_main.py present"; else fail "dragonflydb_main.py missing"; fi
+if grep -qE '^class dragonflydb_main\b' "$MAIN"; then pass "class dragonflydb_main"; else fail "class must be dragonflydb_main"; fi
+if grep -qE 'sys\.path\.append\(.*class' "$MAIN" && grep -qE '^\s*import public' "$MAIN"; then
+  pass "puts the panel helpers on sys.path and imports public"
+else
+  fail "must add the panel's class/ directory to sys.path and import public"
+fi
+if grep -qE 'os\.chdir\("/www/server/panel"\)' "$MAIN" \
+   && ! grep -qE 'if os\.path\.isdir' "$MAIN"; then
+  fail "the panel chdir must be guarded or the module cannot be imported"
+else
+  pass "panel directory chdir is guarded"
+fi
+if grep -qE 'public\.(toResult|returnMsg)\(' "$MAIN"; then fail "wrong return helper; use public.ReturnMsg"; else pass "uses public.ReturnMsg only"; fi
+# action, s, name and a are reserved by the panel dispatcher.
+if grep -oE '_arg\(get, "[a-z]+"' "$MAIN" | grep -qE '"(action|s|name|a)"'; then
+  fail "a plugin argument collides with a reserved name (action, s, name, a)"
+else
+  pass "no reserved argument names"
+fi
+
+step "Endpoint wiring (dragonflydb_main.py vs index.html)"
+for method in GetSettings SetSettings Install Start Stop Restart GetStatus GetLogs; do
+  if grep -q "def $method" "$MAIN" && grep -q "'$method'" "$UI"; then
     pass "$method"
   else
     fail "$method declared in Python but not called by the UI (or vice versa)"

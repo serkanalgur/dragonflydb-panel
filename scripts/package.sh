@@ -30,7 +30,7 @@ ASSET="$NAME-panel-$VERSION.zip"
 rm -rf "$OUT/$NAME"
 mkdir -p "$OUT/$NAME"
 
-for f in info.json install.sh main.sh index.html icon.png public.py; do
+for f in info.json install.sh main.sh index.html icon.png dragonflydb_main.py; do
   cp "$ROOT/dragonflydb-panel/$f" "$OUT/$NAME/"
 done
 cp -r "$ROOT/dragonflydb-panel/dragonfly" "$OUT/$NAME/"
