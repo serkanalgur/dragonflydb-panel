@@ -181,7 +181,11 @@
                 if (failed) { failed(); }
                 return;
             }
-            dfdNotify(res.msg || 'Done', true);
+            // Only announce a message the backend wrote for humans. Structured
+            // payloads travel as JSON inside msg and are consumed by `done`;
+            // printing one would dump the payload into the message box.
+            var isPayload = res.msg && res.msg.charAt(0) === '{';
+            if (res.msg && !isPayload) { dfdNotify(res.msg, true); }
             if (done) { done(res.msg); }
         }).fail(function () {
             dfdNotify('Request failed. Is the plugin installed?', false);
