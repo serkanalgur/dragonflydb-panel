@@ -40,7 +40,7 @@ jobs:
       - name: Resolve version and decide whether to publish
         id: version
         env:
-          GH_TOKEN: ${{ github.token }}   # gh release view below must be authenticated
+          GH_TOKEN: ${{ github.token }}   # used by the publish step's gh release create
           FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
