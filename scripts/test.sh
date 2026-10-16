@@ -158,6 +158,36 @@ for method in GetSettings SetSettings Install Start Stop Restart GetStatus GetLo
   fi
 done
 
+step "Community health files"
+for f in LICENSE README.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md SUPPORT.md; do
+  [ -s "$ROOT/$f" ] && pass "$f" || fail "$f missing or empty"
+done
+if grep -q "CODE_OF_CONDUCT.md" "$ROOT/README.md" && grep -q "SECURITY.md" "$ROOT/README.md" \
+   && grep -q "CONTRIBUTING.md" "$ROOT/README.md"; then
+  pass "README links the community files"
+else
+  fail "README must link CONTRIBUTING, CODE_OF_CONDUCT and SECURITY"
+fi
+# A broken relative link in the README is a dead end for a first-time visitor.
+if command -v python3 >/dev/null && "$PYTHON" - <<'PY'
+import os, re, sys
+src = open("README.md").read()
+bad = []
+for target in re.findall(r"\]\(([^)#][^)]*)\)", src):
+    if target.startswith(("http://", "https://", "mailto:")):
+        continue
+    if not os.path.exists(target):
+        bad.append(target)
+for t in bad:
+    print("broken link:", t)
+sys.exit(1 if bad else 0)
+PY
+then
+  pass "README relative links resolve"
+else
+  fail "README contains links to files that do not exist"
+fi
+
 step "Unit tests"
 if "$PYTHON" -m unittest discover -s "$ROOT/tests" -v 2>&1 | tail -20; then
   pass "unittest"
