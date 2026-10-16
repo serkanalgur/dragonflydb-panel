@@ -172,9 +172,16 @@ class EnvironmentTest(unittest.TestCase):
 
     def test_run_tolerates_a_missing_working_directory(self):
         # _run is called with cwd=/opt/dragonflydb, which does not exist until
-        # the plugin is installed. That must not raise.
+        # the plugin is installed. That must not raise, whatever the host has:
+        # an assertion on success would fail wherever Docker happens to be
+        # installed, which is every CI runner.
         result = self.service._run(["docker", "version"], cwd="/nonexistent/dir")
+        self.assertIsInstance(result, self.service.ComposeResult)
+
+    def test_run_reports_a_missing_binary(self):
+        result = self.service._run(["definitely-not-a-real-binary-xyz"])
         self.assertFalse(result)
+        self.assertIn("not found", result.message)
 
 
 class ClientTest(unittest.TestCase):
