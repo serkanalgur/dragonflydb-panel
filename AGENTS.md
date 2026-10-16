@@ -21,8 +21,8 @@ self-contained. It installs to `/www/server/panel/plugin/dragonflydb/`.
 | --- | --- | --- |
 | `info.json` | Panel metadata: `title`, `name`, `ps`, `versions`, `checks`, `author`, `home` | yes |
 | `install.sh` | Invoked as `install.sh install` and `install.sh uninstall` | yes |
-| `index.html` | The plugin's UI, loaded into the panel shell | yes |
-| `public.py` | Class `public`; each method is an endpoint at `/plugin/dragonflydb/public.<method>` | yes |
+| `index.html` | The plugin's UI, injected into the panel's layout | yes |
+| `dragonflydb_main.py` | Class `dragonflydb_main`; each method is an endpoint at `/plugin?action=a&name=dragonflydb&s=<Method>` | yes |
 | `main.sh` | CLI mirror of the HTTP surface (`bash main.sh status`) | no |
 | `icon.png` | App-store icon, 150x150-ish, shown in the plugin list | yes |
 | `dragonfly/` | Internal modules, importable via the plugin's own `sys.path` entry | no |
@@ -33,18 +33,36 @@ guides use a `class/` directory, but `class` is a Python keyword and
 
 Hard rules:
 
+- **`index.html` must be a fragment.** No `<!DOCTYPE>`, `<html>`, `<head>`,
+  `<body>` or `<title>`. The panel injects the file into its own layout inside a
+  layui modal layer; a full document nests a `<body>` and the template fails to
+  render, which the panel surfaces as a "Getting template" popup followed by a
+  redirect to the home page. Wrap content in
+  `bt-form > bt-w-main > bt-w-menu + bt-w-con.pd15 > .plugin_body` and rely on
+  the panel's stylesheets and jQuery.
 - **Never import outside the standard library and the panel's own modules.** The
   plugin runs inside the panel's interpreter. A dependency added here breaks
   panel upgrades. `scripts/test.sh` audits imports with an AST pass.
+- **The backend file and class names are not free choices.** The panel looks for
+  `<name>_main.py` containing `class <name>_main`. The UI posts to
+  `/plugin?action=a&name=<name>&s=<Method>`.
+- **Reply with `public.ReturnMsg(status, msg)`,** which yields
+  `{"status": bool, "msg": str}`. There is no `data` channel, so structured
+  payloads are JSON encoded into `msg` and decoded in `index.html`.
+- **Never name an argument `action`, `s`, `name` or `a`.** The panel reserves
+  them for dispatch and a collision raises.
+- **Prefix every global in `index.html`** (`dfdNotify`, `dfdCall`, …). The file
+  is injected into the panel's own page, where an unprefixed `status` or `call`
+  collides with panel code.
 - **`install.sh` must handle both verbs** and `Uninstall` must leave no
   containers, volumes, or files behind.
-- **Endpoint methods take `get`** and return `public.toResult(...)`, which
-  produces the `{"status": true|false, "msg": ...}` envelope the UI expects.
 - **Never block an HTTP request.** Anything slow belongs in `service.py` with a
   bounded timeout, or in a backgrounded shell command.
 - **Keep the plugin self-contained.** No imports from the repository root, no
   `../` paths, no absolute references to this checkout.
 - **`info.json` `checks` must match the deployed directory name exactly.**
+- **Enable Developer Mode in the panel** while iterating, or edits to
+  `index.html` and the Python will appear to do nothing.
 
 ### Constraint 2 — the DragonflyDB deployment contract
 
@@ -68,7 +86,7 @@ Hard rules:
 ## Architecture
 
 ```
-public.py            HTTP controller. Validates, delegates, wraps. No logic.
+dragonflydb_main.py   HTTP controller. Validates, delegates, wraps. No logic.
   └── dragonfly/
         config.py    Single source of truth: paths, ports, defaults,
         │            validation, settings persistence.
@@ -77,15 +95,16 @@ public.py            HTTP controller. Validates, delegates, wraps. No logic.
         client.py    Dragonfly HTTP client (stdlib urllib).
 ```
 
-Dependency direction is strictly one way: `public.py → service.py → compose.py →
-config.py`. Nothing imports `public.py`, and no two service modules import each
-other. `client.py` is a leaf.
+Dependency direction is strictly one way: `dragonflydb_main.py → service.py →
+compose.py → config.py`. Nothing imports `dragonflydb_main.py`, and no two
+service modules import each other. `client.py` is a leaf.
 
 ## Principles
 
 **DRY.** Every path, port, image name, and default lives in `config.py`. If a
-literal appears twice, that is a bug — hoist it. `_action` in `public.py`
-exists so start/stop/restart share one implementation instead of three.
+literal appears twice, that is a bug — hoist it. `_action` in
+`dragonflydb_main.py` exists so start/stop/restart share one implementation
+instead of three.
 
 **SOLID, applied concretely:**
 - *Single responsibility* — `config` knows settings, `compose` knows file
@@ -97,7 +116,7 @@ exists so start/stop/restart share one implementation instead of three.
   output; callers branch on it rather than parsing strings.
 - *Interface segregation* — consumers depend on the narrow function they call,
   never on the module wholesale.
-- *Dependency inversion* — `public.py` depends on the `Client` and `ComposeResult`
+- *Dependency inversion* — `dragonflydb_main.py` depends on `Client` and `ComposeResult`
   interfaces, not on concrete HTTP or subprocess details.
 
 **YAGNI.** No plugin marketplace, no multi-node support, no ACL editor, no
@@ -133,7 +152,7 @@ subject ≤ 72 characters.
 | `ci` | Automation config |
 | `chore` | Housekeeping with no source impact |
 
-Scopes: `plugin` (public.py), `config`, `compose`, `service`, `client`, `ui`
+Scopes: `plugin` (dragonflydb_main.py), `config`, `compose`, `service`, `client`, `ui`
 (index.html), `shell` (install.sh / main.sh), `docs`, `ci`, `release`.
 
 Examples that are correct:
@@ -224,13 +243,13 @@ artifact for manual install testing.
 ## Agent-specific rules
 
 - Read `AGENTS.md` and `README.md` fully before the first edit.
-- Never edit `public.py` and a service module in one commit unless the change
+- Never edit `dragonflydb_main.py` and a service module in one commit unless the change
   is a single atomic fix; separate refactors from behaviour changes.
 - Never add a third-party dependency to `dragonfly/`. If upstream needs a
   library we do not have, use the HTTP API instead.
 - Before adding a setting, add it to `config.validate`, to `compose`, and to the
   form in `index.html`, or it is incomplete.
-- After any change to `public.py` or `index.html`, run `./scripts/test.sh`; the
+- After any change to `dragonflydb_main.py` or `index.html`, run `./scripts/test.sh`; the
   endpoint-wiring gate compares the two sides, which is the only defence against
   the duplicated endpoint names drifting apart.
 - Prefer deleting code to adding it.

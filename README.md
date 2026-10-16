@@ -22,7 +22,7 @@ dragonflydb-panel/     <- the deployable unit, deploys to /www/server/panel/plug
 ├── install.sh         <- install / uninstall, run by the panel
 ├── index.html         <- the UI
 ├── icon.png           <- app-store icon
-├── public.py          <- HTTP controller
+├── dragonflydb_main.py <- HTTP controller (panel entry point)
 ├── main.sh            <- CLI mirror: bash main.sh status
 └── dragonfly/         <- internal modules (not `class`: that is a Python keyword)
     ├── config.py      <- paths, defaults, validation, persistence
