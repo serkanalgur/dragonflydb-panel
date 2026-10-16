@@ -151,7 +151,7 @@ and cannot be imported.
 ```
 
 The gates encode the aaPanel and DragonflyDB contracts, and have already caught
-four real defects: a package that shadowed a Python keyword, an eviction-policy
+five real defects: a package that shadowed a Python keyword, an eviction-policy
 validator that rejected every hyphenated policy, a release workflow that could
 not authenticate, and a document-shaped `index.html` that the panel cannot
 render.
