@@ -134,7 +134,7 @@ subject ≤ 72 characters.
 | `chore` | Housekeeping with no source impact |
 
 Scopes: `plugin` (public.py), `config`, `compose`, `service`, `client`, `ui`
-(index.html), `shell` (install.sh / main.sh), `docs`.
+(index.html), `shell` (install.sh / main.sh), `docs`, `ci`, `release`.
 
 Examples that are correct:
 
@@ -142,6 +142,7 @@ Examples that are correct:
 feat(ui): add memory gauge to status panel
 fix(compose): keep host networking on compose v2.24
 refactor(plugin): extract _action to remove triplicated lifecycle code
+ci: run gates on Python 3.9 and 3.12
 docs: record the 6379 port constraint
 ```
 
@@ -149,6 +150,8 @@ Rules:
 - One logical change per commit.
 - **No `Co-Authored-By` trailer.** No AI attribution of any kind.
 - Reference issues with `(#123)` in the body, never in the subject.
+- A PR that changes plugin behaviour bumps `info.json` `versions` in the same
+  commit.
 
 ## Branching and PR flow
 
@@ -190,8 +193,33 @@ Rules:
    git branch -d <branch> && git push origin --delete <branch>
    ```
 
-Release tags are `v<major>.<minor>` and are cut from `main` only after the
-`info.json` `versions` field is bumped in the same PR.
+## Versioning and releases
+
+**The version lives in exactly one place:** `dragonflydb-panel/info.json` →
+`versions`, as semver (`1.0.0`). There is no version constant in the Python and
+a gate enforces that. The release workflow derives the git tag from this field.
+
+On every push to `main`, `.github/workflows/release.yml`:
+
+1. runs `./scripts/test.sh` and aborts on failure;
+2. reads `versions` and compares it with the latest published tag;
+3. skips silently if `v<versions>` already exists;
+4. otherwise runs `./scripts/package.sh`, which builds
+   `dist/<name>-panel-<version>.zip` containing a single top-level directory
+   named exactly as `info.json` `name` — the panel rejects anything else;
+5. tags `v<version>`, pushes the tag, and creates a release with the zip and
+   install instructions.
+
+So the human process is just: **bump `versions` in `info.json` in the same PR
+as the change.** Merging that PR publishes the release. Nothing else is manual.
+
+`./scripts/package.sh [output-dir]` builds the identical zip locally, so you can
+test an install before merging. `workflow_dispatch` with `force: true`
+republishes an existing version.
+
+CI (`.github/workflows/ci.yml`) runs the gates on Python 3.9 and 3.12 for every
+PR — aaPanel 7.x ships 3.12, older panels 3.9 — and uploads the zip as an
+artifact for manual install testing.
 
 ## Agent-specific rules
 

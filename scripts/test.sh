@@ -46,6 +46,19 @@ if [ "$CHECKS" = "$PANEL_PLUGIN_ROOT/$NAME" ]; then
 else
   fail "checks path '$CHECKS' is not under $PANEL_PLUGIN_ROOT"
 fi
+# The release workflow derives its tag from this field; non-semver would fail
+# the build at merge time instead of here.
+VERSIONS=$("$PYTHON" -c "import json;print(json.load(open('$PLUGIN/info.json'))['versions'])" 2>/dev/null)
+if [[ "$VERSIONS" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  pass "versions is semver ($VERSIONS)"
+else
+  fail "versions must be semver like 1.0.0, got '$VERSIONS'"
+fi
+if grep -rqE "PLUGIN_VERSION[[:space:]]*=" "$PLUGIN/dragonfly"; then
+  fail "version is duplicated outside info.json"
+else
+  pass "version declared in exactly one place"
+fi
 
 step "Hygiene rules"
 # AST-based import audit: names that are not in the standard library.

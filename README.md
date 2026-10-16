@@ -30,9 +30,21 @@ dragonflydb-panel/     <- the deployable unit, deploys to /www/server/panel/plug
     ├── service.py     <- container lifecycle
     └── client.py      <- Dragonfly HTTP client (stdlib only)
 scripts/test.sh        <- quality gates
+scripts/package.sh     <- builds the installable zip
 scripts/deploy.sh      <- deploy over SSH
 tests/                 <- unit tests
+.github/workflows/     <- ci.yml on PRs, release.yml publishes on merge
 ```
+
+## Releases
+
+Merging a PR that bumps `versions` in `info.json` publishes a release. The
+workflow tags `v<version>`, builds `dragonflydb-panel-<version>.zip` (a single
+top-level `dragonflydb/` directory, which is what the panel requires), and
+attaches it to a GitHub Release.
+
+Download the zip from **Releases**, then in aaPanel: **Plugins → Install a
+plugin → Local plugin**.
 
 ## Requirements
 
@@ -68,6 +80,7 @@ curl -s localhost:6380/info   # Dragonfly also speaks HTTP
 
 ```bash
 ./scripts/test.sh                        # gates: syntax, hygiene, unit tests
+./scripts/package.sh                     # build dist/*.zip locally
 ./scripts/deploy.sh user@host            # deploy to a panel over SSH
 ```
 
