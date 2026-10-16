@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DragonflyDB</title>
+<style>
+  body { margin: 0; padding: 24px; font: 14px/1.6 -apple-system, "Segoe UI", sans-serif; color: #1f2933; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #616e7c; margin: 0 0 24px; }
+  section { background: #fff; border: 1px solid #e4e7eb; border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+  section h2 { font-size: 15px; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid #cbd2d9; border-radius: 4px; font: inherit; }
+  .field small { display: block; color: #7b8794; font-weight: 400; margin-top: 4px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  button { padding: 8px 16px; border: 1px solid #cbd2d9; border-radius: 4px; background: #f5f7fa; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { background: #e4e7eb; }
+  button.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1d4ed8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat { border: 1px solid #e4e7eb; border-radius: 4px; padding: 12px; }
+  .stat span { display: block; color: #7b8794; font-size: 12px; }
+  .stat strong { font-size: 18px; font-weight: 600; }
+  #msg { padding: 10px 14px; border-radius: 4px; margin-bottom: 20px; display: none; }
+  #msg.ok { display: block; background: #e6f6ec; border: 1px solid #a7dfb9; }
+  #msg.err { display: block; background: #fdeaea; border: 1px solid #f5b5b5; }
+  pre { background: #1f2933; color: #e4e7eb; padding: 14px; border-radius: 4px; overflow: auto; max-height: 340px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>DragonflyDB</h1>
+<p class="sub">Redis-compatible in-memory store. Runs on port 6380 by default so aaPanel's own Redis keeps 6379.</p>
+
+<div id="msg"></div>
+
+<section>
+  <h2>Status</h2>
+  <div class="stats">
+    <div class="stat"><span>State</span><strong id="s-state">–</strong></div>
+    <div class="stat"><span>Version</span><strong id="s-version">–</strong></div>
+    <div class="stat"><span>Keys</span><strong id="s-keys">–</strong></div>
+    <div class="stat"><span>Clients</span><strong id="s-clients">–</strong></div>
+    <div class="stat"><span>Memory used</span><strong id="s-mem">–</strong></div>
+  </div>
+</section>
+
+<section>
+  <h2>Settings</h2>
+  <div class="grid">
+    <div class="field"><label for="port">Port</label><input id="port" type="number" value="6380"><small>Must not be 6379.</small></div>
+    <div class="field"><label for="bind">Bind</label><select id="bind"><option>127.0.0.1</option><option>0.0.0.0</option></select></div>
+    <div class="field"><label for="password">Password</label><input id="password" type="text" placeholder="none"></div>
+    <div class="field"><label for="maxmemory">Max memory</label><input id="maxmemory" value="1gb"><small>e.g. 512mb, 2gb, 4gb</small></div>
+    <div class="field"><label for="maxmemory_policy">Eviction policy</label><select id="maxmemory_policy"></select></div>
+    <div class="field"><label for="snapshot_seconds">Snapshot every (s)</label><input id="snapshot_seconds" type="number" value="900"></div>
+    <div class="field"><label for="log_level">Log level</label><select id="log_level"></select></div>
+    <div class="field"><label for="image_tag">Image tag</label><input id="image_tag" value="v1.26.0"></div>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick="saveSettings()">Save settings</button>
+  </div>
+</section>
+
+<section>
+  <h2>Service</h2>
+  <div class="actions">
+    <button class="primary" onclick="act('install')">Install</button>
+    <button onclick="act('start')">Start</button>
+    <button onclick="act('stop')">Stop</button>
+    <button onclick="act('restart')">Restart</button>
+    <button onclick="showLogs()">View logs</button>
+  </div>
+  <div id="logbox" hidden><pre id="logtext"></pre></div>
+</section>
+
+<script>
+var API = '/plugin/dragonflydb/public';
+
+function notify(text, ok) {
+  var el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = ok ? 'ok' : 'err';
+}
+
+function call(method, payload, done, failed) {
+  var body = new URLSearchParams(payload || {});
+  body.append('p', 1);
+  var req = new XMLHttpRequest();
+  req.open('POST', API + '.' + method, true);
+  req.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  req.onload = function () {
+    var res;
+    try { res = JSON.parse(req.responseText); } catch (e) { return notify('Bad response from panel', false); }
+    // aaPanel wraps toResult() output in {status, msg, data}
+    var body = res.data || res;
+    if (body.status === false) { notify(body.msg || 'Operation failed', false); failed && failed(); }
+    else { notify(body.msg || 'Done', true); done && done(body.data); }
+  };
+  req.onerror = function () { notify('Network error', false); failed && failed(); };
+  req.send(body.toString());
+}
+
+function refreshStatus() {
+  call('status', {}, function (data) {
+    document.getElementById('s-state').textContent = 'Running';
+    document.getElementById('s-version').textContent = data.version;
+    document.getElementById('s-keys').textContent = data.keys;
+    document.getElementById('s-clients').textContent = data.clients;
+    document.getElementById('s-mem').textContent = data.used_memory;
+  });
+}
+
+function refreshStateOnly() {
+  call('status', {}, null, function () {
+    document.getElementById('s-state').textContent = 'Stopped';
+  });
+}
+
+function saveSettings() {
+  var fields = {};
+  ['port','bind','password','maxmemory','maxmemory_policy','snapshot_seconds','log_level','image_tag']
+    .forEach(function (id) { fields[id] = document.getElementById(id).value; });
+  call('set_settings', fields);
+}
+
+function act(method) { call(method, {}, refreshStatus, refreshStateOnly); }
+
+function showLogs() {
+  document.getElementById('logbox').hidden = false;
+  call('logs', {lines: 300}, function (data) {
+    document.getElementById('logtext').textContent = data.log || '(empty)';
+  });
+}
+
+function fillSelect(id, values) {
+  var sel = document.getElementById(id);
+  values.forEach(function (v) {
+    var opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+fillSelect('maxmemory_policy', ['noeviction','allkeys-lru','volatile-lru','allkeys-random','volatile-random','volatile-ttl']);
+fillSelect('log_level', ['debug','verbose','notice','warning']);
+
+call('get_settings', {}, function (data) {
+  Object.keys(data).forEach(function (key) {
+    var el = document.getElementById(key);
+    if (el) el.value = data[key];
+  });
+});
+refreshStatus();
+
+</script>
+</body>
+</html>

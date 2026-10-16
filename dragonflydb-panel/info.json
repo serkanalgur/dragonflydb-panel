@@ -1,0 +1,9 @@
+{
+  "title": "DragonflyDB",
+  "name": "dragonflydb",
+  "ps": "Redis-compatible in-memory store (DragonflyDB)",
+  "versions": "1.0",
+  "checks": "/www/server/panel/plugin/dragonflydb",
+  "author": "serkanalgur",
+  "home": "https://github.com/serkanalgur/dragonflydb-panel"
+}
