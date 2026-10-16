@@ -1,0 +1,67 @@
+---
+name: Bug report
+about: Something in the plugin does not work
+title: ""
+labels: bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please read SUPPORT.md first — it covers the common causes, including
+        the settings page failing to open.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: panel-version
+    attributes:
+      label: aaPanel version
+      placeholder: 1.2.3
+    validations:
+      required: true
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: The `versions` field in info.json
+      placeholder: 1.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Diagnostics
+      description: |
+        Output of `bash /www/server/panel/plugin/dragonflydb/main.sh status`
+        and the relevant lines of /www/server/panel/logs/error.log.
+        Redact any password first.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: Developer Mode was enabled while testing
+          required: false
+        - label: This was reinstalled from the latest release zip
+          required: false

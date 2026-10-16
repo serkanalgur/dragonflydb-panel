@@ -1,0 +1,44 @@
+---
+name: Feature request
+about: Suggest something the plugin should do
+title: ""
+labels: enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Contributions are welcome. Please read AGENTS.md first — it covers the
+        architecture and the DRY, SOLID and YAGNI rules any change has to
+        respect.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation, not the solution you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This can be implemented without a new third-party dependency
+          required: true
+        - label: This does not require DragonflyDB features beyond its documented API
+          required: true
