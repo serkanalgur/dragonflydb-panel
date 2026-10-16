@@ -187,3 +187,4 @@ Security reports: see [SECURITY.md](SECURITY.md).
 [MIT](LICENSE). DragonflyDB itself is licensed separately by the DragonflyDB
 authors; this repository is not affiliated with or endorsed by aaPanel or
 DragonflyDB Ltd.
+probe
