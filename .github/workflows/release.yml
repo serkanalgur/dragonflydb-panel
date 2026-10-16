@@ -1,0 +1,136 @@
+name: Release
+
+# On every merge to main, compare the plugin version declared in info.json
+# against the latest published tag. If they differ, publish a release with a
+# panel-installable zip attached.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish even if the version matches the latest tag"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Quality gates
+        run: ./scripts/test.sh
+
+      - name: Resolve version and decide whether to publish
+        id: version
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c "
+          import json
+          print(json.load(open('dragonflydb-panel/info.json'))['versions'])
+          ")
+          NAME=$(python3 -c "
+          import json
+          print(json.load(open('dragonflydb-panel/info.json'))['name'])
+          ")
+
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::info.json versions must be semver like 1.0.0, got '$VERSION'"
+            exit 1
+          fi
+
+          LATEST=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
+          echo "plugin=$NAME"        >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION"    >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION"       >> "$GITHUB_OUTPUT"
+
+          if [[ "$LATEST" == "v$VERSION" && "$FORCE" != "true" ]]; then
+            echo "publish=false"      >> "$GITHUB_OUTPUT"
+            echo "v$VERSION is already published; nothing to do."
+            exit 0
+          fi
+          if [[ -n "$LATEST" && "$LATEST" == "v$VERSION" ]]; then
+            echo "publish=true"       >> "$GITHUB_OUTPUT"
+            echo "forced release of v$VERSION"
+            exit 0
+          fi
+          echo "publish=true"         >> "$GITHUB_OUTPUT"
+
+      - name: Build the installable zip
+        if: steps.version.outputs.publish == 'true'
+        run: ./scripts/package.sh
+
+      - name: Verify the archive
+        if: steps.version.outputs.publish == 'true'
+        env:
+          PLUGIN: ${{ steps.version.outputs.plugin }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          unzip -l "dist/$PLUGIN-panel-$VERSION.zip"
+          unzip -t  "dist/$PLUGIN-panel-$VERSION.zip" | tail -1
+
+      - name: Publish release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PLUGIN: ${{ steps.version.outputs.plugin }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          NOTES=$(cat <<EOF
+          aaPanel plugin \`$PLUGIN\` $VERSION.
+
+          **Install** — aaPanel: *Plugins → Install a plugin → Local plugin*, upload
+          \`$PLUGIN-panel-$VERSION.zip\`. Or by hand:
+
+          \`\`\`bash
+          unzip $PLUGIN-panel-$VERSION.zip -d /www/server/panel/plugin/
+          bash /www/server/panel/plugin/$PLUGIN/install.sh install
+          \`\`\`
+
+          DragonflyDB listens on 6380 by default so aaPanel's own Redis keeps 6379.
+          Verify with \`redis-cli -p 6380 ping\`.
+          EOF
+          )
+
+          gh release create "$TAG" \
+            --title "$PLUGIN $VERSION" \
+            --notes "$NOTES" \
+            "dist/$PLUGIN-panel-$VERSION.zip"
+
+      - name: Summarise
+        if: always()
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          PUBLISH: ${{ steps.version.outputs.publish }}
+        run: |
+          if [ "$PUBLISH" = "true" ]; then
+            echo "::notice::published $TAG"
+            echo "### Release $TAG" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No new version to publish."
+          fi

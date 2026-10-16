@@ -9,10 +9,12 @@ import re
 
 PLUGIN_NAME = "dragonflydb"
 PLUGIN_TITLE = "DragonflyDB"
-PLUGIN_VERSION = "1.0"
 PLUGIN_AUTHOR = "serkanalgur"
 PLUGIN_HOMEPAGE = "https://github.com/serkanalgur/dragonflydb-panel"
 PLUGIN_PS = "Redis-compatible in-memory store (DragonflyDB)"
+
+# The version lives in info.json (`versions`) and nowhere else. Do not add a
+# PLUGIN_VERSION constant here; it will drift and releases will lie.
 
 PANEL_DIR = "/www/server/panel"
 PLUGIN_DIR = os.path.join(PANEL_DIR, "plugin", PLUGIN_NAME)
