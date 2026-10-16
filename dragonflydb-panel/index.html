@@ -54,9 +54,49 @@
                         background: #1f2933; color: #e4e7eb; padding: 14px; border-radius: 4px;
                         overflow: auto; max-height: 340px; font-size: 12px; white-space: pre-wrap;
                     }
+                    /* Environment indicator. The colour is decoration; the text
+                       beside it is the signal, so colour is never the only cue. */
+                    .dfd-env { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+                    .dfd-dot {
+                        width: 11px; height: 11px; border-radius: 50%; flex: none;
+                        background: #9aa5b1; box-shadow: 0 0 0 3px rgba(154, 165, 177, .18);
+                    }
+                    .dfd-dot.ok { background: #20a53a; box-shadow: 0 0 0 3px rgba(32, 165, 58, .18); }
+                    .dfd-dot.bad { background: #d64b4b; box-shadow: 0 0 0 3px rgba(214, 75, 75, .18); }
+                    .dfd-env-label { font-weight: 600; }
+                    .dfd-env-detail { color: #7b8794; }
+                    .dfd-root button:disabled { opacity: .45; cursor: not-allowed; }
+                    .dfd-warn {
+                        margin-top: 14px; padding: 10px 14px; border-radius: 4px;
+                        background: #fff6e5; border: 1px solid #f0c36d; color: #856404;
+                    }
                 </style>
 
                 <div class="dfd-msg" id="dfd_msg"></div>
+
+                <section>
+                    <h2>Service</h2>
+
+                    <div class="dfd-env">
+                        <span class="dfd-dot" id="dfd_docker_dot"></span>
+                        <span class="dfd-env-label" id="dfd_docker_label">Checking Docker&hellip;</span>
+                        <span class="dfd-env-detail" id="dfd_docker_detail"></span>
+                    </div>
+
+                    <div class="dfd-warn" id="dfd_docker_warn" style="display:none;"></div>
+
+                    <div class="dfd-actions">
+                        <button class="btn btn-primary" id="dfd_btn_install" onclick="dfdAct('Install');">Install</button>
+                        <button class="btn" id="dfd_btn_start" onclick="dfdAct('Start');">Start</button>
+                        <button class="btn" id="dfd_btn_stop" onclick="dfdAct('Stop');">Stop</button>
+                        <button class="btn" id="dfd_btn_restart" onclick="dfdAct('Restart');">Restart</button>
+                        <button class="btn" id="dfd_btn_logs" onclick="dfdGetLogs();">View logs</button>
+                    </div>
+
+                    <div style="margin-top:16px; display:none;" id="dfd_logbox">
+                        <div class="dfd-log" id="dfd_logtext"></div>
+                    </div>
+                </section>
 
                 <section>
                     <h2>Status</h2>
@@ -115,20 +155,6 @@
                     </div>
                 </section>
 
-                <section>
-                    <h2>Service</h2>
-                    <div class="dfd-actions">
-                        <button class="btn btn-primary" onclick="dfdAct('Install');">Install</button>
-                        <button class="btn" onclick="dfdAct('Start');">Start</button>
-                        <button class="btn" onclick="dfdAct('Stop');">Stop</button>
-                        <button class="btn" onclick="dfdAct('Restart');">Restart</button>
-                        <button class="btn" onclick="dfdGetLogs();">View logs</button>
-                    </div>
-                    <div style="margin-top:16px; display:none;" id="dfd_logbox">
-                        <div class="dfd-log" id="dfd_logtext"></div>
-                    </div>
-                </section>
-
             </div>
         </div>
     </div>
@@ -184,8 +210,60 @@
         document.getElementById('dfd_state').textContent = 'Stopped';
     }
 
+    // ---- environment ------------------------------------------------------
+
+    function dfdSetEnabled(id, enabled, reason) {
+        var el = document.getElementById(id);
+        el.disabled = !enabled;
+        if (reason) { el.title = reason; } else { el.removeAttribute('title'); }
+    }
+
+    // Called on load and after every action: a server that loses Docker
+    // between clicks shows disabled buttons instead of a shell error.
+    function dfdRefreshEnvironment() {
+        dfdCall('GetEnvironment', {}, function (msg) {
+            var env = dfdData(msg, null);
+            if (env) { dfdApplyEnvironment(env); }
+        }, null);
+    }
+
+    function dfdApplyEnvironment(env) {
+        var dot = document.getElementById('dfd_docker_dot');
+        var label = document.getElementById('dfd_docker_label');
+        var detail = document.getElementById('dfd_docker_detail');
+        var warn = document.getElementById('dfd_docker_warn');
+
+        if (env.problem) {
+            dot.className = 'dfd-dot bad';
+            label.textContent = 'Docker unavailable';
+            detail.textContent = env.problem;
+            warn.textContent = env.problem + ' Install Docker on the server, then reopen this page.';
+            warn.style.display = 'block';
+        } else {
+            dot.className = 'dfd-dot ok';
+            label.textContent = 'Docker ready';
+            var parts = [];
+            parts.push('compose ' + (env.compose ? 'available' : 'missing'));
+            parts.push(env.installed ? 'plugin installed' : 'plugin not installed');
+            detail.textContent = '(' + parts.join(', ') + ')';
+            warn.style.display = 'none';
+        }
+
+        // Everything that shells out to docker needs docker.
+        ['dfd_btn_install', 'dfd_btn_start', 'dfd_btn_stop', 'dfd_btn_restart', 'dfd_btn_logs']
+            .forEach(function (id) { dfdSetEnabled(id, !env.problem, env.problem || ''); });
+
+        // These additionally need a previous Install to have written the files.
+        if (!env.problem && !env.installed) {
+            var why = 'Save settings and click Install first.';
+            ['dfd_btn_start', 'dfd_btn_stop', 'dfd_btn_restart', 'dfd_btn_logs']
+                .forEach(function (id) { dfdSetEnabled(id, false, why); });
+        }
+    }
+
     function dfdAct(method) {
         dfdCall(method, {}, dfdRefreshStatus, dfdMarkStopped);
+        dfdRefreshEnvironment();
     }
 
     function dfdSaveSettings() {
@@ -194,7 +272,10 @@
             var el = document.getElementById('dfd_' + key);
             if (el) { params[key] = el.value; }
         });
-        dfdCall('SetSettings', params);
+        // Saving writes the deployment files, which is what makes Start and
+        // the rest of the lifecycle actions legal. Re-read the environment so
+        // the buttons update without a page reload.
+        dfdCall('SetSettings', params, dfdRefreshEnvironment);
     }
 
     function dfdGetLogs() {
@@ -229,4 +310,5 @@
     });
 
     dfdRefreshStatus();
+    dfdRefreshEnvironment();
 </script>

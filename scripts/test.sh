@@ -65,7 +65,7 @@ step "Hygiene rules"
 if "$PYTHON" - "$PLUGIN" <<'PY'
 import ast, os, sys, pathlib
 allowed = {
-    "os", "re", "json", "sys", "subprocess", "base64", "urllib",
+    "os", "re", "json", "sys", "subprocess", "base64", "urllib", "shutil",
     "public",  # the panel's own toResult helper
 }
 root = pathlib.Path(sys.argv[1]) / "dragonfly"
@@ -150,7 +150,7 @@ else
 fi
 
 step "Endpoint wiring (dragonflydb_main.py vs index.html)"
-for method in GetSettings SetSettings Install Start Stop Restart GetStatus GetLogs; do
+for method in GetSettings SetSettings Install Start Stop Restart GetStatus GetLogs GetEnvironment; do
   if grep -q "def $method" "$MAIN" && grep -q "'$method'" "$UI"; then
     pass "$method"
   else
@@ -186,6 +186,42 @@ then
   pass "README relative links resolve"
 else
   fail "README contains links to files that do not exist"
+fi
+
+step "Funding and community wiring"
+if [ -s "$ROOT/.github/FUNDING.yml" ] && grep -q '^github: ' "$ROOT/.github/FUNDING.yml"; then
+  pass "FUNDING.yml declares a GitHub Sponsors account"
+else
+  fail ".github/FUNDING.yml missing or empty"
+fi
+if grep -q 'github.com/sponsors/' "$ROOT/README.md"; then pass "README links the sponsor page"; else fail "README does not link the sponsor page"; fi
+
+step "Environment indicator"
+# The Docker dot must carry a text label: colour alone is not an accessible
+# signal, and the gate is the only place that can notice it being removed.
+if grep -q 'dfd_docker_label' "$PLUGIN/index.html" && grep -q 'dfd-dot' "$PLUGIN/index.html"; then
+  pass "docker indicator has a labelled dot"
+else
+  fail "docker indicator must keep its text label alongside the colour"
+fi
+# Service controls belong above the settings form: they are the reason the page
+# exists and the settings are secondary.
+SERVICE_LINE=$(grep -n 'id="dfd_btn_install"' "$PLUGIN/index.html" | cut -d: -f1)
+SETTINGS_LINE=$(grep -n 'id="dfd_port"' "$PLUGIN/index.html" | cut -d: -f1)
+if [ -n "$SERVICE_LINE" ] && [ -n "$SETTINGS_LINE" ] && [ "$SERVICE_LINE" -lt "$SETTINGS_LINE" ]; then
+  pass "service actions sit above the settings form"
+else
+  fail "service actions must appear before the settings form in index.html"
+fi
+if grep -q 'GetEnvironment' "$PLUGIN/dragonflydb_main.py" && grep -q 'prerequisite_message' "$PLUGIN/dragonfly/service.py"; then
+  pass "environment is reported by the backend"
+else
+  fail "docker availability must be checked in the backend, not only in the UI"
+fi
+if grep -q '_require_docker' "$PLUGIN/dragonflydb_main.py"; then
+  pass "actions are refused server-side when docker is missing"
+else
+  fail "a disabled button is not access control: guard the endpoints too"
 fi
 
 step "Unit tests"
