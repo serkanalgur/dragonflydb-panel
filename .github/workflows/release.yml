@@ -40,6 +40,7 @@ jobs:
       - name: Resolve version and decide whether to publish
         id: version
         env:
+          GH_TOKEN: ${{ github.token }}   # gh release view below must be authenticated
           FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
@@ -57,19 +58,21 @@ jobs:
             exit 1
           fi
 
-          LATEST=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
           echo "plugin=$NAME"        >> "$GITHUB_OUTPUT"
           echo "version=$VERSION"    >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION"       >> "$GITHUB_OUTPUT"
 
-          if [[ "$LATEST" == "v$VERSION" && "$FORCE" != "true" ]]; then
+          # Ask git, not the releases API: a tag can outlive its release, and
+          # re-tagging over a pushed tag is the one failure that cannot recover.
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "tag_exists=true"     >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false"    >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$FORCE" != "true" ] && git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
             echo "publish=false"      >> "$GITHUB_OUTPUT"
             echo "v$VERSION is already published; nothing to do."
-            exit 0
-          fi
-          if [[ -n "$LATEST" && "$LATEST" == "v$VERSION" ]]; then
-            echo "publish=true"       >> "$GITHUB_OUTPUT"
-            echo "forced release of v$VERSION"
             exit 0
           fi
           echo "publish=true"         >> "$GITHUB_OUTPUT"
