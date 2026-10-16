@@ -38,6 +38,14 @@ edited the file by hand, check it contains no `<!DOCTYPE>`, `<html>`, `<head>`,
 files were edited outside `/www/server/panel/plugin/dragonflydb/` and deployed
 with `./scripts/deploy.sh user@host`.
 
+**AttributeError after an upgrade**, for example
+`module 'dragonfly.service' has no attribute 'environment'`. The panel is a
+long-lived process and caches imported plugin modules, so an earlier installed
+version can keep serving requests after its files have been replaced. The
+plugin discards its own cached modules on import and this was fixed in 1.2.1.
+Upgrade to 1.2.1 or newer; on an older version, restart the panel after
+upgrading.
+
 **DragonflyDB will not start.** Check `docker logs --tail 200 dragonflydb`. The
 usual cause is a port collision; aaPanel's Redis manager owns 6379 and this
 plugin defaults to 6380. Another cause is `ulimits.memlock` having been removed

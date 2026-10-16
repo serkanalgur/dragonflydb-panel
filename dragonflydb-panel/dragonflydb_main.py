@@ -35,6 +35,38 @@ import public
 # Import the plugin's internal package, which sits next to this file.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import importlib
+
+PACKAGE = "dragonfly"
+
+
+def _load_plugin_package():
+    """Import the plugin's own package, discarding anything already cached.
+
+    The panel is a long-lived process. It reloads the entry-point module on
+    every request, but `from dragonfly import service` resolves straight out
+    of sys.modules, so after an upgrade replaces the files on disk the panel
+    keeps calling the old code. A function added in the new version raises
+    AttributeError even though it exists in the file.
+
+    Dropping our own package and re-importing makes an upgrade take effect
+    without restarting the panel. Only our modules are touched; the panel's
+    `public` and everything else in the process are left alone.
+    """
+    stale = [
+        name
+        for name in sys.modules
+        if name == PACKAGE or name.startswith(PACKAGE + ".")
+    ]
+    for name in stale:
+        del sys.modules[name]
+    importlib.invalidate_caches()
+
+
+_load_plugin_package()
+
+# Imported after the refresh above, so these bindings come from the files
+# currently on disk rather than from sys.modules.
 from dragonfly import compose, config, service  # noqa: E402
 from dragonfly.client import Client  # noqa: E402
 

@@ -37,7 +37,7 @@ class PanelStub(object):
         os.chdir(self.started_in)
         shutil.rmtree(self.root, ignore_errors=True)
         for name in list(sys.modules):
-            if name in ("public", "dragonflydb_main"):
+            if name == "public":
                 del sys.modules[name]
 
 
@@ -57,6 +57,9 @@ class MainModuleTest(unittest.TestCase):
     def tearDown(self):
         sys.path.remove(PLUGIN_DIR)
         self.stub.cleanup()
+        for name in list(sys.modules):
+            if name == "public" or name == "dragonflydb_main" or name.startswith("dragonfly"):
+                del sys.modules[name]
 
     # ---- the conventions the panel depends on -----------------------------
 
@@ -89,6 +92,48 @@ class MainModuleTest(unittest.TestCase):
         result = self.main.dragonflydb_main().SetSettings({"port": "6379"})
         self.assertFalse(result["status"])
         self.assertIn("6379", result["msg"])
+
+    def _plant_stale_package(self):
+        """Simulate the panel still holding the previous installed version.
+
+        Reproducing the real failure needs both halves: the stale package
+        object in sys.modules *and* its submodules bound as attributes on it,
+        because `from dragonfly import service` reads the attribute first. A
+        test that only replaced sys.modules["dragonfly.service"] passes
+        regardless of the fix, which makes it worthless.
+        """
+        import types
+
+        stale_package = types.ModuleType("dragonfly")
+        for name in ("compose", "config", "service", "client"):
+            module = types.ModuleType("dragonfly." + name)
+            setattr(stale_package, name, module)
+            sys.modules["dragonfly." + name] = module
+        sys.modules["dragonfly"] = stale_package
+        return stale_package
+
+    def test_stale_cached_module_is_discarded_on_reload(self):
+        """Regression: an upgrade must take effect without a panel restart.
+
+        The panel is long-lived, so the internal package survives from the
+        previously installed version. A function added by an upgrade used to
+        raise AttributeError because the import resolved out of that cache.
+        """
+        self._plant_stale_package()
+
+        reloaded = importlib.reload(self.main)
+
+        self.assertTrue(
+            hasattr(reloaded.service, "environment"),
+            "the entry point kept a stale dragonfly.service from the previous version",
+        )
+        self.assertTrue(hasattr(reloaded.service, "docker_available"))
+        self.assertTrue(callable(reloaded.service.environment))
+
+    def test_reload_does_not_evict_the_panel_module(self):
+        importlib.reload(self.main)
+        # public belongs to the panel process; dropping it would be harmful.
+        self.assertIn("public", sys.modules)
 
     def test_every_public_method_exists(self):
         for method in (

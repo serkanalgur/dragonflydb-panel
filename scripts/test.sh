@@ -223,6 +223,22 @@ if grep -q '_require_docker' "$PLUGIN/dragonflydb_main.py"; then
 else
   fail "a disabled button is not access control: guard the endpoints too"
 fi
+# The panel is long-lived, so the internal package survives from the previous
+# installed version. Without a cache reset, an upgrade raises AttributeError for
+# anything the new version added, and the fix is invisible until a panel restart.
+if grep -q 'invalidate_caches' "$PLUGIN/dragonflydb_main.py" \
+   && grep -q 'startswith(PACKAGE' "$PLUGIN/dragonflydb_main.py"; then
+  pass "stale internal modules are discarded before import"
+else
+  fail "an upgrade will not take effect until a panel restart: reset the import cache"
+fi
+# Structured payloads travel as JSON inside msg; printing one dumps it into the
+# message box where the user has to read it.
+if grep -qE "isPayload|charAt\(0\) === '\{'" "$PLUGIN/index.html"; then
+  pass "structured payloads are not printed as messages"
+else
+  fail "index.html must not render a JSON payload into the message box"
+fi
 
 step "Unit tests"
 if "$PYTHON" -m unittest discover -s "$ROOT/tests" -v 2>&1 | tail -20; then
