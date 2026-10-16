@@ -94,6 +94,7 @@ class MainModuleTest(unittest.TestCase):
         for method in (
             "GetSettings", "SetSettings", "Install",
             "Start", "Stop", "Restart", "GetStatus", "GetLogs",
+            "GetEnvironment",
         ):
             self.assertTrue(
                 callable(getattr(self.main.dragonflydb_main, method)),

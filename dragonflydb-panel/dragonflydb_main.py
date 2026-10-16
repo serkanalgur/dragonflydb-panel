@@ -104,6 +104,10 @@ class dragonflydb_main(object):
     # ---- lifecycle --------------------------------------------------------
 
     def Install(self, get):
+        blocked = self._require_docker()
+        if blocked:
+            return blocked
+
         if not os.path.exists(config.SETTINGS_FILE):
             return _fail("Save settings before installing")
 
@@ -125,6 +129,17 @@ class dragonflydb_main(object):
     def Restart(self, get):
         return self._action(service.restart, "Restarted")
 
+    # ---- environment ------------------------------------------------------
+
+    def GetEnvironment(self, get):
+        """What the settings page needs before offering any action.
+
+        Called on load and after every action, so a server that loses Docker
+        between clicks shows a disabled button set instead of a stack trace
+        from a failed shell command.
+        """
+        return _data(service.environment())
+
     # ---- observability ----------------------------------------------------
 
     def GetStatus(self, get):
@@ -145,12 +160,26 @@ class dragonflydb_main(object):
     # ---- internals --------------------------------------------------------
 
     def _action(self, operation, success):
+        blocked = self._require_docker()
+        if blocked:
+            return blocked
         if not service.is_installed():
             return _fail("Not installed")
         result = operation()
         if result:
             return _ok(success)
         return _fail(result.message)
+
+    def _require_docker(self):
+        """Refuse an action early, with a reason the user can act on.
+
+        The UI already disables these buttons, but a disabled button is not
+        an access control: the endpoint has to be safe on its own.
+        """
+        problem = service.prerequisite_message()
+        if problem:
+            return _fail(problem)
+        return None
 
 
 if __name__ == "__main__":

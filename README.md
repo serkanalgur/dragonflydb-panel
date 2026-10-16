@@ -7,6 +7,7 @@ inside the aaPanel (宝塔 / Baota) control panel, without touching the shell.
 [![CI](https://github.com/serkanalgur/dragonflydb-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/serkanalgur/dragonflydb-panel/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/release/serkanalgur/dragonflydb-panel.svg)](https://github.com/serkanalgur/dragonflydb-panel/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/sponsor-%23serkanalgur-ea4aaa?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/serkanalgur)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 
 ## Overview
@@ -78,6 +79,18 @@ Point an application at it by changing only the port:
 define('WP_REDIS_HOST', '127.0.0.1');
 define('WP_REDIS_PORT', '6380');
 ```
+
+## Requirements check
+
+The settings page verifies the prerequisites before offering any action, so a
+missing dependency is visible before it turns into a failed command:
+
+- a labelled dot next to the **Service** controls reports whether Docker is
+  usable, with the specific reason when it is not;
+- the **Start**, **Stop**, **Restart** and **View logs** buttons are disabled
+  until Docker and Compose v2 are present, and until the deployment files exist;
+- the same checks run again on the server for every action, so the buttons are
+  never the only thing standing between a user and a raw shell error.
 
 ## Configuration
 
@@ -151,6 +164,15 @@ the DRY and SOLID rules, and the commit and release conventions.
 Merging a pull request that bumps `versions` in
 [`info.json`](dragonflydb-panel/info.json) publishes a GitHub Release with the
 installable zip attached. There is no separate release step.
+
+## Sponsor
+
+DragonFly Panel is free and MIT licensed, and stays that way.
+
+If it saves you time on a production server, you can
+[become a sponsor on GitHub](https://github.com/sponsors/serkanalgur). Sponsorship
+is what keeps the releases coming: testing against a real aaPanel instance and
+tracking its plugin conventions over time is the expensive part of this project.
 
 ## Contributing
 

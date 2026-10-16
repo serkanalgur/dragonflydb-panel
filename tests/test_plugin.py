@@ -130,6 +130,53 @@ class PersistenceTest(unittest.TestCase):
                 config.SETTINGS_FILE = original
 
 
+class EnvironmentTest(unittest.TestCase):
+    """Docker detection must answer without raising on any host state."""
+
+    def setUp(self):
+        from dragonfly import service
+        self.service = service
+
+    def test_environment_reports_all_flags(self):
+        env = self.service.environment()
+        for key in ("docker", "compose", "installed", "running", "problem"):
+            self.assertIn(key, env)
+
+    def test_problem_is_none_or_a_sentence(self):
+        problem = self.service.prerequisite_message()
+        self.assertTrue(problem is None or problem.endswith("."))
+
+    def test_missing_docker_is_named_first(self):
+        original = self.service.docker_available
+        self.service.docker_available = lambda: False
+        try:
+            self.assertIn("Docker", self.service.prerequisite_message())
+            self.assertFalse(self.service.compose_available())
+            self.assertFalse(self.service._container_running())
+        finally:
+            self.service.docker_available = original
+
+    def test_running_reflects_the_inspect_output(self):
+        original = self.service.docker_available
+        self.service.docker_available = lambda: True
+        original_run = self.service._run
+        self.service._run = lambda args, timeout=180, cwd=None: (
+            self.service.ComposeResult(True, "true\n")
+            if args[1] == "inspect" else self.service.ComposeResult(True, "")
+        )
+        try:
+            self.assertTrue(self.service._container_running())
+        finally:
+            self.service.docker_available = original
+            self.service._run = original_run
+
+    def test_run_tolerates_a_missing_working_directory(self):
+        # _run is called with cwd=/opt/dragonflydb, which does not exist until
+        # the plugin is installed. That must not raise.
+        result = self.service._run(["docker", "version"], cwd="/nonexistent/dir")
+        self.assertFalse(result)
+
+
 class ClientTest(unittest.TestCase):
     INFO = "\n".join([
         "dragonfly_version:v1.26.0",
